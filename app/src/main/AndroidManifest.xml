@@ -1,0 +1,14 @@
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+<application ...>
+    <service 
+        android:name=".CallRecorderService"
+        android:foregroundServiceType="microphone"
+        android:exported="false" />
+    <receiver android:name=".BootReceiver" android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+    </receiver>
+</application>
