@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.media.MediaRecorder;
 import android.os.*;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.view.*;
 import android.widget.Button;
 import android.widget.Toast;
@@ -19,11 +21,35 @@ public class CallService extends Service {
     private MediaRecorder mediaRecorder;
     private boolean isRecording = false;
     private File audioFile;
+    private TelephonyManager telephonyManager;
+    private PhoneStateListener phoneStateListener;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        telephonyManager = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
+        phoneStateListener = new PhoneStateListener() {
+            @Override
+            public void onCallStateChanged(int state, String incomingNumber) {
+                super.onCallStateChanged(state, incomingNumber);
+                if (state == TelephonyManager.CALL_STATE_OFFHOOK || state == TelephonyManager.CALL_STATE_RINGING) {
+                    if (floatingView == null) {
+                        showFloatingBubble();
+                    }
+                } else if (state == TelephonyManager.CALL_STATE_IDLE) {
+                    stopAudioRecording();
+                    removeFloatingBubble();
+                }
+            }
+        };
+        if (telephonyManager != null) {
+            telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+        }
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         setupForegroundNotification();
-        showFloatingBubble();
         return START_STICKY; // إعادة التشغيل التلقائي من النظام فور الإغلاق
     }
 
@@ -41,8 +67,8 @@ public class CallService extends Service {
         }
         
         Notification notification = new NotificationCompat.Builder(this, "RecordingChannel")
-            .setContentTitle("مسجل المكالمات والزر العائم نشط")
-            .setContentText("التطبيق في حالة استعداد لتسجيل المكالمات عبر الزر العائم.")
+            .setContentTitle("مسجل المكالمات في وضع الاستعداد")
+            .setContentText("التطبيق يراقب حالة الهاتف لتنشيط الزر العائم وتجهيز المكالمة تلقائياً.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build();
@@ -54,7 +80,6 @@ public class CallService extends Service {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         if (windowManager == null) return;
 
-        // تهيئة واجهة الزر العائم برمجياً وتصميمه بشكل فقاعة مستديرة أنيقة
         final Button bubbleButton = new Button(this);
         bubbleButton.setText("🎙️");
         bubbleButton.setBackgroundColor(0xFFFF5722); // برتقالي مميز
@@ -75,12 +100,10 @@ public class CallService extends Service {
             PixelFormat.TRANSLUCENT
         );
 
-        // وضع الفقاعة في منتصف اليمين كشكل افتراضي
         params.gravity = Gravity.TOP | Gravity.START;
         params.x = 100;
         params.y = 400;
 
-        // دعم تحريك الزر بسحب اليد (Drag Events)
         bubbleButton.setOnTouchListener(new View.OnTouchListener() {
             private int lastAction;
             private int initialX;
@@ -108,7 +131,6 @@ public class CallService extends Service {
 
                     case MotionEvent.ACTION_UP:
                         if (lastAction == MotionEvent.ACTION_DOWN) {
-                            // تم النقر بضغطة سريعة -> بدء أو إنهاء تسجيل الصوت
                             toggleCallRecording(bubbleButton);
                         }
                         lastAction = event.getAction();
@@ -120,6 +142,17 @@ public class CallService extends Service {
 
         windowManager.addView(bubbleButton, params);
         floatingView = bubbleButton;
+    }
+
+    private void removeFloatingBubble() {
+        if (windowManager != null && floatingView != null) {
+            try {
+                windowManager.removeView(floatingView);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            floatingView = null;
+        }
     }
 
     private void toggleCallRecording(Button bubbleButton) {
@@ -134,23 +167,17 @@ public class CallService extends Service {
             stopAudioRecording();
             bubbleButton.setText("🎙️");
             bubbleButton.setBackgroundColor(0xFFFF5722); // العودة للون العادي
-            Toast.makeText(this, "تم حفظ تسجيل المكالمة بنجاح في مجلد التسجيلات!", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "تم حفظ تسجيل المكالمة في مجلد مخصص بنجاح!", Toast.LENGTH_LONG).show();
         }
     }
 
     private void startAudioRecording() {
         try {
             mediaRecorder = new MediaRecorder();
-            
-            // شرح متوافق مع نظام أندرويد لحماية خصوصية المكالمات:
-            // في أنظمة أندرويد الحديثة (9 و 10 وما فوق)، يمنع النظام تماماً استخدام مصادر صوت الخطوط الداخلية المباشرة لغير مكالمات النظام الأصلية.
-            // الطريقة المعتمدة والصحيحة لجميع الأجهزة والاصدارات مع تسجيل واضح لكلا الطرفين بدون Speaker-Mode
-            // هي استخدام مصدر الميكروفون القياسي والتقاط صوت السماعة الخارجية مباشرة بعد رفع مستوى الصوت.
             mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             
-            // توجيه المسار للمجلد التابع لحفظ التسجيلات والاستماع إليها لاحقاً
             File sampleDir = new File(getExternalFilesDir(null), "MyRecordings");
             if (!sampleDir.exists()) {
                 sampleDir.mkdirs();
@@ -185,8 +212,9 @@ public class CallService extends Service {
     public void onDestroy() {
         super.onDestroy();
         stopAudioRecording();
-        if (windowManager != null && floatingView != null) {
-            windowManager.removeView(floatingView);
+        removeFloatingBubble();
+        if (telephonyManager != null && phoneStateListener != null) {
+            telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
         }
     }
 
