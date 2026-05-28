@@ -4,11 +4,11 @@ plugins {
 
 android {
     namespace 'com.recorder.app'
-    compileSdk 34 // يدعم أحدث إصدارات أندرويد
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.recorder.app"
-        minSdk 24 // يعمل على أغلب الهواتف
+        minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"

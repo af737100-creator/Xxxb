@@ -9,12 +9,23 @@ public class CallService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         // إنشاء إشعار دائم لجعل الخدمة لا تموت أبداً
-        NotificationChannel channel = new NotificationChannel("1", "Rec", NotificationManager.IMPORTANCE_LOW);
-        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                "RecordingChannel",
+                "خدمة التسجيل النشطة",
+                NotificationManager.IMPORTANCE_LOW
+            );
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
         
-        Notification notification = new NotificationCompat.Builder(this, "1")
-            .setContentTitle("التسجيل نشط")
+        Notification notification = new NotificationCompat.Builder(this, "RecordingChannel")
+            .setContentTitle("مسجل المكالمات نشط بالخلفية")
+            .setContentText("التطبيق يعمل في الخلفية لمراقبة وتسجيل المكالمات.")
             .setSmallIcon(android.R.drawable.ic_menu_save)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build();
             
         startForeground(1, notification);
