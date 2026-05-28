@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
             File[] files = sampleDir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    if (file.isFile() && file.getName().endsWith(".mp4")) {
+                    if (file.isFile() && (file.getName().endsWith(".mp4") || file.getName().endsWith(".m4a"))) {
                         recordingFilesList.add(file);
                         long dateMs = file.lastModified();
                         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
@@ -115,10 +115,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void playRecording(File file) {
+        if (!file.exists() || file.length() == 0) {
+            Toast.makeText(this, "تنبيه: ملف التسجيل فارغ أو غير موجود. قد يحدث هذا إذا حظر هاتفك أو نظام الحماية صلاحية الميكروفون أثناء المكالمات النشطة. لنتائج أفضل، ينصح بتفعيل مكبر الصوت (Speaker).", Toast.LENGTH_LONG).show();
+            return;
+        }
         stopPlayback();
         mediaPlayer = new MediaPlayer();
         try {
             mediaPlayer.setDataSource(file.getAbsolutePath());
+            
+            // ضبط قنوات إخراج الصوت وتجربة توجيهها لمكبر الصوت القياسي لضمان الاستماع لكلتا طريقتي التشغيل
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mediaPlayer.setAudioAttributes(
+                    new android.media.AudioAttributes.Builder()
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .build()
+                );
+            } else {
+                mediaPlayer.setAudioStreamType(android.media.AudioManager.STREAM_MUSIC);
+            }
+            
             mediaPlayer.prepare();
             mediaPlayer.start();
 

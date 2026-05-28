@@ -32,11 +32,20 @@ public class CallService extends Service {
             @Override
             public void onCallStateChanged(int state, String incomingNumber) {
                 super.onCallStateChanged(state, incomingNumber);
-                if (state == TelephonyManager.CALL_STATE_OFFHOOK || state == TelephonyManager.CALL_STATE_RINGING) {
+                if (state == TelephonyManager.CALL_STATE_OFFHOOK) {
+                    // الرد على مكالمة أو الاتصال (كل من الواردة والصادرة) -> بدء التسجيل التلقائي فوراً
+                    if (floatingView == null) {
+                        showFloatingBubble();
+                    }
+                    startAudioRecording();
+                    updateFloatingBubbleState(true);
+                } else if (state == TelephonyManager.CALL_STATE_RINGING) {
+                    // رنين المكالمة (الواردة) -> إظهار الزر تهيئة للتسجيل
                     if (floatingView == null) {
                         showFloatingBubble();
                     }
                 } else if (state == TelephonyManager.CALL_STATE_IDLE) {
+                    // انتهاء المكالمة -> إيقاف وحفظ التسجيل تلقائياً وإخفاء الزر العائم
                     stopAudioRecording();
                     removeFloatingBubble();
                 }
@@ -81,9 +90,8 @@ public class CallService extends Service {
         if (windowManager == null) return;
 
         final Button bubbleButton = new Button(this);
-        bubbleButton.setText("🎙️");
-        bubbleButton.setBackgroundColor(0xFFFF5722); // برتقالي مميز
         bubbleButton.setTextColor(0xFFFFFFFF);
+        updateBubbleAppearance(bubbleButton, isRecording);
 
         int layoutType;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -158,39 +166,91 @@ public class CallService extends Service {
         if (!isRecording) {
             startAudioRecording();
             if (isRecording) {
-                bubbleButton.setText("🛑");
-                bubbleButton.setBackgroundColor(0xFFE53935); // أحمر للتسجيل النشط
-                Toast.makeText(this, "جاري تسجيل المكالمة ...", Toast.LENGTH_SHORT).show();
+                updateBubbleAppearance(bubbleButton, true);
+                Toast.makeText(this, "تم بدء تسجيل المكالمة تلقائياً!", Toast.LENGTH_SHORT).show();
             }
         } else {
             stopAudioRecording();
-            bubbleButton.setText("🎙️");
-            bubbleButton.setBackgroundColor(0xFFFF5722); // العودة للون العادي
+            updateBubbleAppearance(bubbleButton, false);
             Toast.makeText(this, "تم حفظ تسجيل المكالمة في مجلد مخصص بنجاح!", Toast.LENGTH_LONG).show();
         }
     }
 
+    private void updateFloatingBubbleState(boolean recording) {
+        if (floatingView instanceof Button) {
+            updateBubbleAppearance((Button) floatingView, recording);
+        }
+    }
+
+    private void updateBubbleAppearance(Button bubbleButton, boolean recording) {
+        if (recording) {
+            bubbleButton.setText("🛑");
+            bubbleButton.setBackgroundColor(0xFFE53935); // أحمر للتسجيل النشط
+        } else {
+            bubbleButton.setText("🎙️");
+            bubbleButton.setBackgroundColor(0xFFFF5722); // برتقالي مميز
+        }
+    }
+
     private void startAudioRecording() {
-        try {
-            mediaRecorder = new MediaRecorder();
-            mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            
-            File sampleDir = new File(getExternalFilesDir(null), "MyRecordings");
-            if (!sampleDir.exists()) {
-                sampleDir.mkdirs();
+        if (isRecording) return;
+
+        File sampleDir = new File(getExternalFilesDir(null), "MyRecordings");
+        if (!sampleDir.exists()) {
+            sampleDir.mkdirs();
+        }
+
+        // اسم ملف واضح بالوقت والملحق mp4
+        audioFile = new File(sampleDir, "Call_Record_" + System.currentTimeMillis() + ".mp4");
+
+        // تجربة بذكاء قنوات متعددة لتسجيل صوت الطرفين:
+        // 1. VOICE_COMMUNICATION (قناة مشفرة ذكية مخصصة لل VoIP والمكالمات الطرفية)
+        // 2. VOICE_RECOGNITION (التعرف الذكي عالي الصوت)
+        // 3. MIC (الميكروفون الداخلي لترشيح الصوت)
+        int[] audioSources = {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            MediaRecorder.AudioSource.MIC
+        };
+
+        boolean success = false;
+        String lastError = "";
+
+        for (int source : audioSources) {
+            try {
+                mediaRecorder = new MediaRecorder();
+                mediaRecorder.setAudioSource(source);
+                mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+                mediaRecorder.setAudioEncodingBitRate(64000); // 64kbps دقة عالية
+                mediaRecorder.setAudioSamplingRate(16000);   // سحب مريح
+                mediaRecorder.setOutputFile(audioFile.getAbsolutePath());
+
+                mediaRecorder.prepare();
+                mediaRecorder.start();
+                success = true;
+                break;
+            } catch (Exception e) {
+                lastError = e.getMessage();
+                if (mediaRecorder != null) {
+                    try {
+                        mediaRecorder.release();
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                    mediaRecorder = null;
+                }
             }
-            audioFile = File.createTempFile("Recording_" + System.currentTimeMillis() + "_", ".mp4", sampleDir);
-            
-            mediaRecorder.setOutputFile(audioFile.getAbsolutePath());
-            mediaRecorder.prepare();
-            mediaRecorder.start();
+        }
+
+        if (success) {
             isRecording = true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(this, "خطأ في تهيئة مسجل الصوت: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        } else {
             isRecording = false;
+            if (audioFile != null && audioFile.exists()) {
+                audioFile.delete();
+            }
+            Toast.makeText(this, "فشل تهيئة مسجل المكالمات ثنائي الطرفين: " + lastError, Toast.LENGTH_LONG).show();
         }
     }
 
