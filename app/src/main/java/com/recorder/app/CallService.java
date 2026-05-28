@@ -105,7 +105,6 @@ public class CallService extends Service {
         params.y = 400;
 
         bubbleButton.setOnTouchListener(new View.OnTouchListener() {
-            private int lastAction;
             private int initialX;
             private int initialY;
             private float initialTouchX;
@@ -119,21 +118,21 @@ public class CallService extends Service {
                         initialY = params.y;
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
-                        lastAction = event.getAction();
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
                         params.x = initialX + (int) (event.getRawX() - initialTouchX);
                         params.y = initialY + (int) (event.getRawY() - initialTouchY);
                         windowManager.updateViewLayout(bubbleButton, params);
-                        lastAction = event.getAction();
                         return true;
 
                     case MotionEvent.ACTION_UP:
-                        if (lastAction == MotionEvent.ACTION_DOWN) {
+                        float diffX = event.getRawX() - initialTouchX;
+                        float diffY = event.getRawY() - initialTouchY;
+                        // إذا كانت المسافة التي تحركها الإصبع أقل من 10 بكسل، نعتبرها نقرة (Click) بدلاً من سحب (Drag)
+                        if (Math.abs(diffX) < 10 && Math.abs(diffY) < 10) {
                             toggleCallRecording(bubbleButton);
                         }
-                        lastAction = event.getAction();
                         return true;
                 }
                 return false;
