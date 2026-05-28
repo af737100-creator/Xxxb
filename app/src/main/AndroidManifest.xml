@@ -2,10 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.recorder.app">
 
-    <!-- الصلاحيات الأساسية لتسجيل المكالمات والبدء التلقائي -->
+    <!-- الصلاحيات الأساسية لتسجيل المكالمات والبدء التلقائي والعمل الدائم بالخلفية -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
     <!-- مطلوب في أندرويد 13 (Tiramisu)+ لإظهار إشعارات الخدمات -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -16,7 +19,7 @@
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/ic_menu_save"
-        android:label="مسجل المكالمات الدائم"
+        android:label="مسجل مكالمات الزر العائم"
         android:roundIcon="@android:drawable/ic_menu_save"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
@@ -31,7 +34,7 @@
             </intent-filter>
         </activity>
 
-        <!-- الخدمة الخلفية المستمرة للتسجيل -->
+        <!-- الخدمة الخلفية المستمرة للتسجيل مع إدارة الزر العائم -->
         <service 
             android:name=".CallService"
             android:foregroundServiceType="microphone"
